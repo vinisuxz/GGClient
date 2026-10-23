@@ -1,15 +1,15 @@
-package com.example.commands.manager
+package com.github.vinisuxz.ggclient.commands.manager
 
-import com.example.ExampleMod
-import com.example.commands.core.SimpleCommand
-import com.example.commands.core.SimpleCommand.ProcessCommandRunnable
+import com.github.vinisuxz.ggclient.GGClient
+import com.github.vinisuxz.ggclient.commands.core.SimpleCommand
+import com.github.vinisuxz.ggclient.commands.core.SimpleCommand.ProcessCommandRunnable
 import net.minecraft.command.ICommandSender
 import net.minecraftforge.client.ClientCommandHandler
 
 class CommandManager {
     init {
-        registerCommand(ExampleMod.MOD_ID) {
-            ExampleMod.configManager.openConfigGui()
+        registerCommand(GGClient.MOD_ID) {
+            GGClient.configManager.openConfigGui()
         }
     }
 

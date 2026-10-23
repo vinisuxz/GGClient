@@ -1,6 +1,6 @@
-package com.example.commands.core
+package com.github.vinisuxz.ggclient.commands.core
 
-import com.example.errors.CommandError
+import com.github.vinisuxz.ggclient.errors.CommandError
 import net.minecraft.command.CommandBase
 import net.minecraft.command.ICommandSender
 import net.minecraft.util.BlockPos

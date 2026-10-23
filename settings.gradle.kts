@@ -24,4 +24,4 @@ plugins {
 }
 
 
-rootProject.name = "examplemod"
+rootProject.name = "GGClient"
