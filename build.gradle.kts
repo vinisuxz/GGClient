@@ -34,12 +34,9 @@ sourceSets.main {
 repositories {
     mavenCentral()
     mavenLocal()
-
     maven("https://repo.spongepowered.org/maven/")
-
     // If you don't want to log in with your real minecraft account, remove this line
     maven("https://pkgs.dev.azure.com/djtheredstoner/DevAuth/_packaging/public/maven/v1")
-
     maven("https://repo.nea.moe/releases")
     maven("https://maven.notenoughupdates.org/releases")
 }
@@ -51,7 +48,6 @@ val shadowImpl: Configuration by configurations.creating {
 val shadowModImpl: Configuration by configurations.creating {
     configurations.implementation.get().extendsFrom(this)
 }
-
 
 dependencies {
     minecraft("com.mojang:minecraft:1.8.9")
@@ -77,7 +73,6 @@ dependencies {
     runtimeOnly("me.djtheredstoner:DevAuth-forge-legacy:1.2.1")
 
     shadowModImpl("org.notenoughupdates.moulconfig:legacy:3.0.0-beta.3")
-
     shadowImpl(libs.libautoupdate)
     shadowImpl("org.jetbrains.kotlin:kotlin-reflect:2.3.10")
 }
@@ -104,7 +99,6 @@ loom {
         defaultRefmapName.set("mixins.$modid.refmap.json")
     }
 }
-
 
 // Tasks:
 
@@ -144,18 +138,19 @@ tasks.processResources {
     rename("(.+_at.cfg)", "META-INF/$1")
 }
 
-
 val remapJar by tasks.named<net.fabricmc.loom.task.RemapJarTask>("remapJar") {
     archiveClassifier.set("")
     inputFile.set(tasks.shadowJar.get().archiveFile)
 }
-
 
 tasks.shadowJar {
     destinationDirectory.set(layout.buildDirectory.dir("badjars"))
     archiveClassifier.set("all-dev")
     configurations = listOf(shadowImpl, shadowModImpl)
     exclude("META-INF/versions/**")
+
+    // Fix: keeps META-INF/services files in sync with the relocated packages
+    mergeServiceFiles()
 
     // If you want to include other dependencies and shadow them, you can relocate them in here
     relocate("io.github.moulberry.moulconfig", "$baseGroup.deps.moulconfig")
