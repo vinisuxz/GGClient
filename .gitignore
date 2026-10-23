@@ -1,0 +1,11 @@
+.idea/
+.vscode/
+run/
+build/
+.gradle/
+
+# Eclipse/IDE metadata and its output
+.classpath
+.project
+.settings/
+bin/
