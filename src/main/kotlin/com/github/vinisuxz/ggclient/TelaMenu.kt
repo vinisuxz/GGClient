@@ -21,16 +21,22 @@ private object Tema {
     val bolinhaOff = 0xFFC3CAD9.toInt()
 }
 
-class TelaMenu : GuiScreen() {
+private class Linha(
+    val nome: String,
+    val icone: String?,
+    val ativo: () -> Boolean,
+    val alterna: () -> Unit,
+    val engrenagem: (() -> Unit)?
+)
 
+class TelaMenu : GuiScreen() {
     // tamanho do painel em "unidades de design"
     private val painelW = 520f
     private val painelH = 360f
-
     private val abas = listOf("Módulos", "Configurações", "Perfil")
     private val iconesAba = listOf("aba_modulos", "aba_config", "aba_perfil")
 
-    // área da lista de módulos
+    // área da lista
     private val lx = 170f
     private val ly = 98f
     private val lw = 332f
@@ -40,12 +46,10 @@ class TelaMenu : GuiScreen() {
 
     private var aba = 0
     private var scroll = 0f
-
     private var u = 1f
     private var px = 0f
     private var py = 0f
     private var esc = 1
-
     private var apertado = false
     private var arrastou = false
     private var yInicio = 0f
@@ -61,9 +65,40 @@ class TelaMenu : GuiScreen() {
     private fun mx(): Float = (Mouse.getX() - px) / u
     private fun my(): Float = (mc.displayHeight - Mouse.getY() - 1 - py) / u
 
+    private fun abrirConfig(m: Modulo) {
+        if (m.temAuto) {
+            mc.displayGuiScreen(TelaAutoText(this))
+        } else {
+            mc.displayGuiScreen(TelaConfig(m, this))
+        }
+    }
+
+    private fun linhas(): List<Linha> {
+        if (aba == 0) {
+            return Mods.lista.map { m ->
+                val gear: (() -> Unit)? = if (m.configuravel) ({ abrirConfig(m) }) else null
+                Linha(m.nome, m.nome.lowercase(), { m.ativo }, { m.ativo = !m.ativo }, gear)
+            }
+        }
+        if (aba == 1) {
+            return Boost.opcoes.map { o ->
+                Linha(o.nome, null, { o.ativo }, { Boost.definir(o, !o.ativo) }, null)
+            }
+        }
+        return emptyList()
+    }
+
+    private fun total(): Int = when (aba) {
+        0 -> Mods.lista.size
+        1 -> Boost.opcoes.size
+        else -> 0
+    }
+
     private fun maxScroll(): Float {
-        val total = Mods.lista.size * (linhaH + espaco) - espaco
-        return maxOf(0f, total - lh)
+        val n = total()
+        if (n == 0) return 0f
+        val tot = n * (linhaH + espaco) - espaco
+        return maxOf(0f, tot - lh)
     }
 
     private fun ajustaScroll() {
@@ -77,14 +112,26 @@ class TelaMenu : GuiScreen() {
         buttonList.clear()
     }
 
+    // engrenagem desenhada, usada se não existir o PNG
+    private fun engrenagem(cx: Float, cy: Float, r: Float) {
+        val cor = Tema.cinza
+        for (k in 0 until 8) {
+            GlStateManager.pushMatrix()
+            GlStateManager.translate(cx, cy, 0f)
+            GlStateManager.rotate(k * 45f, 0f, 0f, 1f)
+            Desenho.rrect(-r * 0.16f, -r, r * 0.32f, r * 0.55f, 0.6f, cor)
+            GlStateManager.popMatrix()
+        }
+        Desenho.rrect(cx - r * 0.75f, cy - r * 0.75f, r * 1.5f, r * 1.5f, r * 0.75f, cor)
+        Desenho.rrect(cx - r * 0.3f, cy - r * 0.3f, r * 0.6f, r * 0.6f, r * 0.3f, Tema.linhaBorda)
+    }
+
     override fun drawScreen(mouseX: Int, mouseY: Int, partialTicks: Float) {
         layout()
         ajustaScroll()
         val mxd = mx()
         val myd = my()
-
         Gui.drawRect(0, 0, width, height, 0x99000000.toInt())
-
         GlStateManager.pushMatrix()
         GlStateManager.disableCull()
         GlStateManager.scale(1f / esc, 1f / esc, 1f)
@@ -119,18 +166,20 @@ class TelaMenu : GuiScreen() {
 
         // título da aba
         Fonte.desenhar(abas[aba], lx, Fonte.yCentro(76f, 22f), 22f, Tema.branco)
+        if (aba == 1) {
+            Fonte.desenhar(
+                "Otimizações de FPS",
+                lx + Fonte.largura(abas[aba], 22f) + 12f,
+                Fonte.yCentro(78f, 12f), 12f, Tema.cinza
+            )
+        }
 
         when (aba) {
-            0 -> desenharModulos()
-            1 -> {
-                Fonte.desenhar("Abrir ou fechar o menu: Right Shift", lx, Fonte.yCentro(112f, 14f), 14f, Tema.branco)
-                Fonte.desenhar("Suas configurações são salvas sozinhas.", lx, Fonte.yCentro(138f, 13f), 13f, Tema.cinza)
-                Fonte.desenhar("Use o botão Cfg de cada módulo para", lx, Fonte.yCentro(164f, 13f), 13f, Tema.cinza)
-                Fonte.desenhar("ajustar tecla, posição e tamanho.", lx, Fonte.yCentro(182f, 13f), 13f, Tema.cinza)
-            }
+            0, 1 -> desenharLista()
             else -> {
                 Fonte.desenhar("Jogador: " + mc.session.username, lx, Fonte.yCentro(112f, 14f), 14f, Tema.branco)
                 Fonte.desenhar("GG CLIENT v1.0", lx, Fonte.yCentro(138f, 13f), 13f, Tema.cinza)
+                Fonte.desenhar("Abrir ou fechar o menu: Right Shift", lx, Fonte.yCentro(164f, 13f), 13f, Tema.cinza)
             }
         }
 
@@ -140,7 +189,8 @@ class TelaMenu : GuiScreen() {
         GlStateManager.color(1f, 1f, 1f, 1f)
     }
 
-    private fun desenharModulos() {
+    private fun desenharLista() {
+        val itens = linhas()
         // recorte: nada desenha fora da lista
         val sx = (px + lx * u).toInt()
         val sw = (lw * u).toInt() + 1
@@ -148,51 +198,52 @@ class TelaMenu : GuiScreen() {
         val sy = (mc.displayHeight - (py + (ly + lh) * u)).toInt()
         GL11.glEnable(GL11.GL_SCISSOR_TEST)
         GL11.glScissor(sx, sy, sw, sh)
-
-        Mods.lista.forEachIndexed { i, mod ->
+        itens.forEachIndexed { i, item ->
             val ry = ly + i * (linhaH + espaco) - scroll
             if (ry + linhaH >= ly && ry <= ly + lh) {
                 Desenho.rrect(lx, ry, lw, linhaH, 12f, Tema.linhaBorda)
                 Desenho.rrect(lx + 1f, ry + 1f, lw - 2f, linhaH - 2f, 11f, Tema.linha)
-
-                // ícone do módulo (PNG) ou a inicial, se não tiver PNG
-                Desenho.rrect(lx + 10f, ry + 8f, 28f, 28f, 8f, Tema.iconeFundo)
-                if (!Icones.desenhar(mod.nome.lowercase(), lx + 14f, ry + 12f, 20f)) {
-                    val letra = mod.nome.first().toString()
-                    Fonte.desenhar(
-                        letra,
-                        lx + 10f + (28f - Fonte.largura(letra, 15f)) / 2f,
-                        Fonte.yCentro(ry + 22f, 15f), 15f, Tema.destaque
-                    )
+                val ic = item.icone
+                var nx = lx + 16f
+                if (ic != null) {
+                    nx = lx + 52f
+                    Desenho.rrect(lx + 10f, ry + 8f, 28f, 28f, 8f, Tema.iconeFundo)
+                    if (!Icones.desenhar(ic, lx + 14f, ry + 12f, 20f)) {
+                        val letra = item.nome.first().toString()
+                        Fonte.desenhar(
+                            letra,
+                            lx + 10f + (28f - Fonte.largura(letra, 15f)) / 2f,
+                            Fonte.yCentro(ry + 22f, 15f), 15f, Tema.destaque
+                        )
+                    }
                 }
+                Fonte.desenhar(item.nome, nx, Fonte.yCentro(ry + 22f, 15f), 15f, Tema.branco)
 
-                Fonte.desenhar(mod.nome, lx + 52f, Fonte.yCentro(ry + 22f, 15f), 15f, Tema.branco)
-
-                if (mod.configuravel) {
-                    Desenho.rrect(lx + lw - 112f, ry + 11f, 40f, 22f, 8f, Tema.linhaBorda)
-                    Fonte.desenhar(
-                        "Cfg",
-                        lx + lw - 112f + (40f - Fonte.largura("Cfg", 12f)) / 2f,
-                        Fonte.yCentro(ry + 22f, 12f), 12f, Tema.cinza
-                    )
+                // engrenagem
+                if (item.engrenagem != null) {
+                    val gx = lx + lw - 90f
+                    Desenho.rrect(gx, ry + 11f, 26f, 22f, 8f, Tema.linhaBorda)
+                    val desenhou = Icones.desenhar("engrenagem", gx + 5f, ry + 14f, 16f) ||
+                        Icones.desenhar("aba_config", gx + 5f, ry + 14f, 16f)
+                    if (!desenhou) engrenagem(gx + 13f, ry + 22f, 7.5f)
                 }
 
                 // switch
+                val ligado = item.ativo()
                 val tx = lx + lw - 58f
                 val ty = ry + 11f
-                Desenho.rrect(tx, ty, 44f, 22f, 11f, if (mod.ativo) Tema.destaque else Tema.trilhoOff)
-                val bx = if (mod.ativo) tx + 44f - 19f else tx + 3f
-                Desenho.rrect(bx, ty + 3f, 16f, 16f, 8f, if (mod.ativo) Tema.branco else Tema.bolinhaOff)
+                Desenho.rrect(tx, ty, 44f, 22f, 11f, if (ligado) Tema.destaque else Tema.trilhoOff)
+                val bx = if (ligado) tx + 44f - 19f else tx + 3f
+                Desenho.rrect(bx, ty + 3f, 16f, 16f, 8f, if (ligado) Tema.branco else Tema.bolinhaOff)
             }
         }
-
         GL11.glDisable(GL11.GL_SCISSOR_TEST)
 
         // barrinha de rolagem
         val max = maxScroll()
         if (max > 0f) {
-            val total = lh + max
-            val thumbH = maxOf(24f, lh * lh / total)
+            val tot = lh + max
+            val thumbH = maxOf(24f, lh * lh / tot)
             val thumbY = ly + (scroll / max) * (lh - thumbH)
             Desenho.rrect(lx + lw + 6f, thumbY, 3f, thumbH, 1.5f, Tema.trilhoOff)
         }
@@ -212,16 +263,16 @@ class TelaMenu : GuiScreen() {
                 return
             }
         }
-        if (aba != 0) return
+        if (aba == 2) return
         if (!dentro(x, y, lx, ly, lw, lh)) return
-
-        Mods.lista.forEachIndexed { i, mod ->
+        linhas().forEachIndexed { i, item ->
             val ry = ly + i * (linhaH + espaco) - scroll
             if (dentro(x, y, lx, ry, lw, linhaH)) {
-                if (mod.configuravel && dentro(x, y, lx + lw - 118f, ry, 52f, linhaH)) {
-                    mc.displayGuiScreen(TelaConfig(mod, this))
+                val g = item.engrenagem
+                if (g != null && dentro(x, y, lx + lw - 96f, ry, 34f, linhaH)) {
+                    g()
                 } else {
-                    mod.ativo = !mod.ativo
+                    item.alterna()
                 }
             }
         }
@@ -241,7 +292,7 @@ class TelaMenu : GuiScreen() {
         if (!apertado) return
         val y = my()
         if (!arrastou && Math.abs(y - yInicio) > 5f) arrastou = true
-        if (arrastou && aba == 0) {
+        if (arrastou && aba != 2) {
             scroll -= (y - yUltimo)
             ajustaScroll()
         }
@@ -260,7 +311,7 @@ class TelaMenu : GuiScreen() {
     override fun handleMouseInput() {
         super.handleMouseInput()
         val d = Mouse.getEventDWheel()
-        if (d != 0 && aba == 0) {
+        if (d != 0 && aba != 2) {
             scroll += if (d > 0) -24f else 24f
             ajustaScroll()
         }
