@@ -44,7 +44,8 @@ class GGClient {
         MinecraftForge.EVENT_BUS.register(configManager)
 
         registerEvents(
-            configKeyBind
+            configKeyBind,
+            Eventos()
         )
     }
 
