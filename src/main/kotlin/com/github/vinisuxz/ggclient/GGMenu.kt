@@ -88,7 +88,9 @@ class TelaMenu : GuiScreen() {
         drawCenteredString(fontRendererObj, "GGClient - Mods", width / 2, 20, 0xFFFFFF)
         super.drawScreen(mouseX, mouseY, partialTicks)
     }
-
+    override fun onGuiClosed() {
+        Salvar.salvar()
+    }
     override fun doesGuiPauseGame(): Boolean = false
 }
 
@@ -195,14 +197,18 @@ class TelaConfig(private val mod: Modulo, private val pai: GuiScreen) : GuiScree
         drawCenteredString(fontRendererObj, "Config: " + mod.nome, width / 2, 25, 0xFFFFFF)
         super.drawScreen(mouseX, mouseY, partialTicks)
     }
-
+    override fun onGuiClosed() {
+        Salvar.salvar()
+    }
     override fun doesGuiPauseGame(): Boolean = false
 }
 
 class Eventos {
 
     private val mc = Minecraft.getMinecraft()
-
+    init {
+        Salvar.carregar()
+    }
     // ToggleSprint
     private var sprintLigado = false
     private var ctrlAnterior = false
