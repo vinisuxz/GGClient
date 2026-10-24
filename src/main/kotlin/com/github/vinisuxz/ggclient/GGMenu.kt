@@ -15,18 +15,21 @@ import net.minecraft.scoreboard.ScorePlayerTeam
 import net.minecraft.util.EnumChatFormatting
 import net.minecraftforge.client.event.RenderGameOverlayEvent
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent
+import net.minecraftforge.fml.common.gameevent.InputEvent
 import net.minecraftforge.fml.common.gameevent.TickEvent
 import org.lwjgl.input.Keyboard
+import org.lwjgl.input.Mouse
 
 class Modulo(
     val nome: String,
     var ativo: Boolean = false,
     val layout: Boolean = false,
     val temEscala: Boolean = false,
-    val temTecla: Boolean = false
+    val temTecla: Boolean = false,
+    val temAuto: Boolean = false
 ) {
     val configuravel: Boolean
-        get() = layout || temEscala || temTecla
+        get() = layout || temEscala || temTecla || temAuto
 
     var fundo = true
     var offX = 0
@@ -37,14 +40,20 @@ class Modulo(
 
 object Mods {
     val fps = Modulo("FPS", true)
+    val cps = Modulo("CPS", false, layout = true)
     val toggleSprint = Modulo("ToggleSprint")
     val fullbright = Modulo("Fullbright")
     val perspective = Modulo("Perspective", false, temTecla = true)
     val noParticles = Modulo("NoParticles")
+    val noHurtCam = Modulo("NoHurtCam")
+    val autoText = Modulo("AutoText", false, temAuto = true)
     val scoreboard = Modulo("Scoreboard", false, layout = true, temEscala = true)
     val chat = Modulo("Chat", false, layout = true)
 
-    val lista = listOf(fps, toggleSprint, fullbright, perspective, noParticles, scoreboard, chat)
+    val lista = listOf(
+        fps, cps, toggleSprint, fullbright, perspective,
+        noParticles, noHurtCam, autoText, scoreboard, chat
+    )
 }
 
 class TelaConfig(private val mod: Modulo, private val pai: GuiScreen) : GuiScreen() {
@@ -52,6 +61,9 @@ class TelaConfig(private val mod: Modulo, private val pai: GuiScreen) : GuiScree
     private var esperandoTecla = false
     private var botaoTecla: GuiButton? = null
     private var botaoEscala: GuiButton? = null
+    private var arrastando = false
+    private var ultimoX = 0
+    private var ultimoY = 0
 
     private fun textoFundo(): String = "Fundo: " + (if (mod.fundo) "ON" else "OFF")
 
@@ -85,12 +97,6 @@ class TelaConfig(private val mod: Modulo, private val pai: GuiScreen) : GuiScree
         if (mod.layout) {
             buttonList.add(GuiButton(0, cx - 75, y, 150, 20, textoFundo()))
             y += 30
-            buttonList.add(GuiButton(1, cx - 75, y, 70, 20, "Esquerda"))
-            buttonList.add(GuiButton(2, cx + 5, y, 70, 20, "Direita"))
-            y += 24
-            buttonList.add(GuiButton(3, cx - 75, y, 70, 20, "Cima"))
-            buttonList.add(GuiButton(4, cx + 5, y, 70, 20, "Baixo"))
-            y += 30
             buttonList.add(GuiButton(5, cx - 75, y, 150, 20, "Resetar posicao"))
             y += 30
         }
@@ -99,16 +105,11 @@ class TelaConfig(private val mod: Modulo, private val pai: GuiScreen) : GuiScree
     }
 
     override fun actionPerformed(button: GuiButton) {
-        val passo = 10
         when (button.id) {
             0 -> {
                 mod.fundo = !mod.fundo
                 button.displayString = textoFundo()
             }
-            1 -> mod.offX -= passo
-            2 -> mod.offX += passo
-            3 -> mod.offY -= passo
-            4 -> mod.offY += passo
             5 -> {
                 mod.offX = 0
                 mod.offY = 0
@@ -129,6 +130,33 @@ class TelaConfig(private val mod: Modulo, private val pai: GuiScreen) : GuiScree
         }
     }
 
+    override fun mouseClicked(mouseX: Int, mouseY: Int, mouseButton: Int) {
+        super.mouseClicked(mouseX, mouseY, mouseButton)
+        if (mouseButton == 0 && mod.layout) {
+            val sobreBotao = buttonList.any { it.mousePressed(mc, mouseX, mouseY) }
+            if (!sobreBotao) {
+                arrastando = true
+                ultimoX = mouseX
+                ultimoY = mouseY
+            }
+        }
+    }
+
+    override fun mouseClickMove(mouseX: Int, mouseY: Int, clickedMouseButton: Int, timeSinceLastClick: Long) {
+        super.mouseClickMove(mouseX, mouseY, clickedMouseButton, timeSinceLastClick)
+        if (arrastando) {
+            mod.offX += mouseX - ultimoX
+            mod.offY += mouseY - ultimoY
+            ultimoX = mouseX
+            ultimoY = mouseY
+        }
+    }
+
+    override fun mouseReleased(mouseX: Int, mouseY: Int, state: Int) {
+        super.mouseReleased(mouseX, mouseY, state)
+        arrastando = false
+    }
+
     override fun keyTyped(typedChar: Char, keyCode: Int) {
         if (esperandoTecla) {
             if (keyCode != Keyboard.KEY_ESCAPE) {
@@ -146,8 +174,14 @@ class TelaConfig(private val mod: Modulo, private val pai: GuiScreen) : GuiScree
     }
 
     override fun drawScreen(mouseX: Int, mouseY: Int, partialTicks: Float) {
-        // sem fundo escuro, pra você ver o scoreboard/chat mexendo ao vivo
+        // sem fundo escuro, pra você ver o elemento mexendo ao vivo
         drawCenteredString(fontRendererObj, "Config: " + mod.nome, width / 2, 25, 0xFFFFFF)
+        if (mod.layout) {
+            drawCenteredString(fontRendererObj, "Arraste na tela para mover", width / 2, height - 30, 0xAAAAAA)
+            if (!mod.ativo) {
+                drawCenteredString(fontRendererObj, "Ative o módulo para ver a mudança", width / 2, height - 18, 0xFF5555)
+            }
+        }
         super.drawScreen(mouseX, mouseY, partialTicks)
     }
 
@@ -166,6 +200,8 @@ class Eventos {
         Salvar.carregar()
     }
 
+    private var boostAplicado = false
+
     // ToggleSprint
     private var sprintLigado = false
     private var ctrlAnterior = false
@@ -183,6 +219,15 @@ class Eventos {
     private var realYaw = 0f
     private var realPitch = 0f
     private var viewAnterior = 0
+
+    // NoHurtCam
+    private var hurtSalvo = -1
+
+    // CPS
+    private val cliques = ArrayList<Long>()
+
+    // AutoText
+    private val autoAnterior = BooleanArray(AutoTextDados.SLOTS)
 
     // Scoreboard
     private var objetivoOculto: ScoreObjective? = null
@@ -205,8 +250,21 @@ class Eventos {
     }
 
     @SubscribeEvent
+    fun aoMouse(e: InputEvent.MouseInputEvent) {
+        if (Mouse.getEventButton() == 0 && Mouse.getEventButtonState()) {
+            cliques.add(System.currentTimeMillis())
+        }
+    }
+
+    @SubscribeEvent
     fun aoTick(e: TickEvent.ClientTickEvent) {
         if (e.phase != TickEvent.Phase.END || mc.thePlayer == null) return
+
+        // aplica as otimizações de FPS salvas (uma vez, ao entrar no mundo)
+        if (!boostAplicado) {
+            boostAplicado = true
+            Boost.aplicarSalvos()
+        }
 
         val semTela = mc.currentScreen == null
         val codigoSprint = mc.gameSettings.keyBindSprint.keyCode
@@ -223,6 +281,21 @@ class Eventos {
         // NoParticles
         if (Mods.noParticles.ativo && mc.theWorld != null) {
             mc.effectRenderer.clearEffects(mc.theWorld)
+        }
+
+        // AutoText: cada tecla manda a sua mensagem
+        if (Mods.autoText.ativo && semTela) {
+            for (i in 0 until AutoTextDados.SLOTS) {
+                val k = AutoTextDados.teclas[i]
+                val apertada = k != 0 && Keyboard.isKeyDown(k)
+                if (apertada && !autoAnterior[i]) {
+                    val msg = AutoTextDados.msgs[i]
+                    if (msg.isNotBlank()) mc.thePlayer.sendChatMessage(msg)
+                }
+                autoAnterior[i] = apertada
+            }
+        } else {
+            for (i in 0 until AutoTextDados.SLOTS) autoAnterior[i] = false
         }
 
         // Perspective (ativo só enquanto segura a tecla configurada)
@@ -275,10 +348,17 @@ class Eventos {
 
     @SubscribeEvent
     fun aoRender(e: TickEvent.RenderTickEvent) {
+        val p = mc.thePlayer
+
         if (e.phase == TickEvent.Phase.START) {
             // NoParticles: limpa antes de desenhar o quadro
             if (Mods.noParticles.ativo && mc.theWorld != null) {
                 mc.effectRenderer.clearEffects(mc.theWorld)
+            }
+            // NoHurtCam: zera o "tempo de dano" só durante o desenho
+            if (p != null && Mods.noHurtCam.ativo) {
+                hurtSalvo = p.hurtTime
+                p.hurtTime = 0
             }
         } else {
             // segurança: devolve o scoreboard se algo deu errado
@@ -288,10 +368,13 @@ class Eventos {
                 mundo.scoreboard.setObjectiveInDisplaySlot(1, oculto)
                 objetivoOculto = null
             }
+            if (p != null && hurtSalvo >= 0) {
+                p.hurtTime = hurtSalvo
+            }
+            hurtSalvo = -1
         }
 
-        val p = mc.thePlayer ?: return
-        if (!perspAtiva) return
+        if (p == null || !perspAtiva) return
         if (e.phase == TickEvent.Phase.START) {
             // câmera usa a rotação "falsa"
             p.rotationYaw = camYaw
@@ -313,6 +396,18 @@ class Eventos {
     fun aoDesenhar(e: RenderGameOverlayEvent.Text) {
         if (Mods.toggleSprint.ativo && sprintLigado) {
             mc.fontRendererObj.drawStringWithShadow("[Sprint: ATIVADO]", 5f, 35f, 0x55FF55)
+        }
+
+        if (Mods.cps.ativo) {
+            val agora = System.currentTimeMillis()
+            cliques.removeAll { agora - it > 1000L }
+            val txt = "CPS: " + cliques.size
+            val x = 4 + Mods.cps.offX
+            val y = 16 + Mods.cps.offY
+            if (Mods.cps.fundo) {
+                Gui.drawRect(x - 2, y - 2, x + mc.fontRendererObj.getStringWidth(txt) + 2, y + 10, 0x66000000)
+            }
+            mc.fontRendererObj.drawStringWithShadow(txt, x.toFloat(), y.toFloat(), 0xFFFFFF)
         }
     }
 
@@ -370,7 +465,7 @@ class Eventos {
         val ancoraY = res.scaledHeight / 2f
 
         GlStateManager.pushMatrix()
-        // posição escolhida no Cfg
+        // posição escolhida arrastando
         GlStateManager.translate(m.offX.toFloat(), m.offY.toFloat(), 0f)
         // tamanho: cresce/encolhe a partir do lado direito da tela
         GlStateManager.translate(ancoraX, ancoraY, 0f)
