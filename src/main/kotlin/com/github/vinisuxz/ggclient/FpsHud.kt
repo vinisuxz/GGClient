@@ -12,6 +12,7 @@ object FpsHud {
 
     @SubscribeEvent
     fun onRenderOverlay(event: RenderGameOverlayEvent.Text) {
+        if (!Mods.fps.ativo) return
         val mc = Minecraft.getMinecraft()
         if (mc.gameSettings.showDebugInfo) return
         val fps = Minecraft.getDebugFPS()
