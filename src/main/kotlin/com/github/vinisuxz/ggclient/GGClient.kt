@@ -38,6 +38,8 @@ class GGClient {
 
     @Mod.EventHandler
     fun init(event: FMLInitializationEvent) {
+        FpsHud.register()
+
         configManager = ConfigManager()
         MinecraftForge.EVENT_BUS.register(configManager)
 
