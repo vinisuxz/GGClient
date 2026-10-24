@@ -117,3 +117,97 @@ object AutoTextDados {
 }
 
 class TelaAutoText(private val pai: GuiScreen) : GuiScreen() {
+    private val campos = ArrayList<GuiTextField>()
+    private var esperando = -1
+
+    private fun textoTecla(i: Int): String {
+        if (esperando == i) return "> aperte <"
+        val k = AutoTextDados.teclas[i]
+        return if (k == 0) "Sem tecla" else Keyboard.getKeyName(k)
+    }
+
+    private fun atualizaBotoes() {
+        for (b in buttonList) {
+            if (b.id < AutoTextDados.SLOTS) b.displayString = textoTecla(b.id)
+        }
+    }
+
+    private fun guardaTextos() {
+        for (i in campos.indices) {
+            AutoTextDados.msgs[i] = campos[i].text
+        }
+    }
+
+    override fun initGui() {
+        guardaTextos()
+        buttonList.clear()
+        campos.clear()
+        Keyboard.enableRepeatEvents(true)
+        val cx = width / 2
+        for (i in 0 until AutoTextDados.SLOTS) {
+            val y = 55 + i * 30
+            buttonList.add(GuiButton(i, cx - 145, y, 80, 20, textoTecla(i)))
+            val c = GuiTextField(100 + i, fontRendererObj, cx - 60, y, 205, 20)
+            c.setMaxStringLength(100)
+            c.text = AutoTextDados.msgs[i]
+            campos.add(c)
+        }
+        buttonList.add(GuiButton(50, cx - 75, 55 + AutoTextDados.SLOTS * 30 + 10, 150, 20, "Voltar"))
+    }
+
+    override fun actionPerformed(button: GuiButton) {
+        if (button.id == 50) {
+            mc.displayGuiScreen(pai)
+        } else if (button.id < AutoTextDados.SLOTS) {
+            esperando = button.id
+            atualizaBotoes()
+        }
+    }
+
+    override fun mouseClicked(mouseX: Int, mouseY: Int, mouseButton: Int) {
+        super.mouseClicked(mouseX, mouseY, mouseButton)
+        for (c in campos) c.mouseClicked(mouseX, mouseY, mouseButton)
+    }
+
+    override fun keyTyped(typedChar: Char, keyCode: Int) {
+        if (esperando >= 0) {
+            val i = esperando
+            if (keyCode == Keyboard.KEY_BACK || keyCode == Keyboard.KEY_DELETE) {
+                AutoTextDados.teclas[i] = 0
+            } else if (keyCode != Keyboard.KEY_ESCAPE) {
+                AutoTextDados.teclas[i] = keyCode
+            }
+            esperando = -1
+            atualizaBotoes()
+            return
+        }
+        if (keyCode == Keyboard.KEY_ESCAPE) {
+            mc.displayGuiScreen(pai)
+            return
+        }
+        for (c in campos) {
+            if (c.isFocused) c.textboxKeyTyped(typedChar, keyCode)
+        }
+    }
+
+    override fun updateScreen() {
+        for (c in campos) c.updateCursorCounter()
+    }
+
+    override fun drawScreen(mouseX: Int, mouseY: Int, partialTicks: Float) {
+        drawDefaultBackground()
+        drawCenteredString(fontRendererObj, "AutoText", width / 2, 18, 0xFFFFFF)
+        drawCenteredString(fontRendererObj, "Escolha uma tecla e a mensagem (ou comando) que ela envia", width / 2, 32, 0xAAAAAA)
+        drawCenteredString(fontRendererObj, "Backspace remove a tecla", width / 2, 43, 0x777777)
+        super.drawScreen(mouseX, mouseY, partialTicks)
+        for (c in campos) c.drawTextBox()
+    }
+
+    override fun onGuiClosed() {
+        guardaTextos()
+        Keyboard.enableRepeatEvents(false)
+        Salvar.salvar()
+    }
+
+    override fun doesGuiPauseGame(): Boolean = false
+}
