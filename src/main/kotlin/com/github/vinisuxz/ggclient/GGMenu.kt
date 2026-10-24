@@ -17,6 +17,8 @@ import net.minecraftforge.client.event.RenderGameOverlayEvent
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent
 import net.minecraftforge.fml.common.gameevent.TickEvent
 import org.lwjgl.input.Keyboard
+import org.lwjgl.input.Mouse
+import org.lwjgl.opengl.GL11
 
 class Modulo(
     val nome: String,
@@ -47,32 +49,279 @@ object Mods {
     val lista = listOf(fps, toggleSprint, fullbright, perspective, noParticles, scoreboard, chat)
 }
 
+private object Cores {
+    val escurecer = 0x99000000.toInt()
+    val painel = 0xF20B1020.toInt()
+    val borda = 0xFF1C2D52.toInt()
+    val linha = 0xFF111A2E.toInt()
+    val linhaBorda = 0xFF1B2745.toInt()
+    val icone = 0xFF18233D.toInt()
+    val destaque = 0xFF1E6BFF.toInt()
+    val branco = 0xFFFFFFFF.toInt()
+    val cinza = 0xFF8A94A8.toInt()
+    val ouro = 0xFFFFC107.toInt()
+    val trilhoOff = 0xFF3A4156.toInt()
+    val bolinhaOff = 0xFFB8C0D4.toInt()
+}
+
 class TelaMenu : GuiScreen() {
 
-    private fun texto(mod: Modulo): String =
-        mod.nome + ": " + (if (mod.ativo) "ON" else "OFF")
+    private val abas = listOf("Módulos", "Configurações", "Perfil")
+
+    private val descricoes = mapOf(
+        "FPS" to "Exibe o FPS na tela",
+        "ToggleSprint" to "Corre automaticamente",
+        "Fullbright" to "Deixa tudo bem claro",
+        "Perspective" to "Olhe ao redor sem mexer o boneco",
+        "NoParticles" to "Remove as partículas",
+        "Scoreboard" to "Personaliza o placar",
+        "Chat" to "Personaliza o chat"
+    )
+
+    private var aba = 0
+    private var scroll = 0f
+
+    private val sideW = 92
+    private val headerH = 28
+    private val rowH = 23
+    private val gap = 3
+
+    private var px = 0
+    private var py = 0
+    private var pw = 0
+    private var ph = 0
+    private var listX = 0
+    private var listY = 0
+    private var listW = 0
+    private var listH = 0
+
+    private var pressed = false
+    private var dragged = false
+    private var pressY = 0
+    private var lastY = 0
+
+    private fun calcular() {
+        pw = minOf(340, width - 16)
+        ph = minOf(240, height - 10)
+        px = (width - pw) / 2
+        py = (height - ph) / 2
+        listX = px + sideW + 10
+        listY = py + headerH + 24
+        listW = pw - sideW - 20
+        listH = ph - headerH - 30
+    }
+
+    private fun maxScroll(): Float {
+        val total = Mods.lista.size * (rowH + gap) - gap
+        return maxOf(0f, (total - listH).toFloat())
+    }
+
+    private fun ajustaScroll() {
+        scroll = scroll.coerceIn(0f, maxScroll())
+    }
+
+    private fun dentro(mx: Int, my: Int, x: Int, y: Int, w: Int, h: Int): Boolean =
+        mx >= x && mx < x + w && my >= y && my < y + h
+
+    private fun caixa(x: Int, y: Int, w: Int, h: Int, cor: Int) {
+        Gui.drawRect(x + 1, y, x + w - 1, y + h, cor)
+        Gui.drawRect(x, y + 1, x + w, y + h - 1, cor)
+    }
+
+    private fun painelCaixa(x: Int, y: Int, w: Int, h: Int, borda: Int, fundo: Int) {
+        caixa(x, y, w, h, borda)
+        caixa(x + 1, y + 1, w - 2, h - 2, fundo)
+    }
+
+    private fun coroa(x: Int, y: Int) {
+        Gui.drawRect(x, y + 8, x + 16, y + 12, Cores.ouro)
+        Gui.drawRect(x, y + 2, x + 3, y + 8, Cores.ouro)
+        Gui.drawRect(x + 6, y, x + 10, y + 8, Cores.ouro)
+        Gui.drawRect(x + 13, y + 2, x + 16, y + 8, Cores.ouro)
+    }
 
     override fun initGui() {
         buttonList.clear()
-        Mods.lista.forEachIndexed { i, mod ->
-            val y = 40 + i * 24
-            if (mod.configuravel) {
-                buttonList.add(GuiButton(i, width / 2 - 75, y, 120, 20, texto(mod)))
-                buttonList.add(GuiButton(100 + i, width / 2 + 49, y, 26, 20, "Cfg"))
-            } else {
-                buttonList.add(GuiButton(i, width / 2 - 75, y, 150, 20, texto(mod)))
+        calcular()
+    }
+
+    override fun drawScreen(mouseX: Int, mouseY: Int, partialTicks: Float) {
+        calcular()
+        ajustaScroll()
+        val f = fontRendererObj
+
+        Gui.drawRect(0, 0, width, height, Cores.escurecer)
+        painelCaixa(px, py, pw, ph, Cores.borda, Cores.painel)
+
+        // cabeçalho
+        coroa(px + 10, py + 8)
+        GlStateManager.pushMatrix()
+        GlStateManager.translate((px + 32).toFloat(), (py + 9).toFloat(), 0f)
+        GlStateManager.scale(1.25f, 1.25f, 1f)
+        val gg = EnumChatFormatting.BOLD.toString() + "GG "
+        f.drawStringWithShadow(gg, 0f, 0f, Cores.branco)
+        f.drawStringWithShadow(
+            EnumChatFormatting.BOLD.toString() + "CLIENT",
+            f.getStringWidth(gg).toFloat(), 0f, Cores.destaque
+        )
+        GlStateManager.popMatrix()
+
+        val hoverX = dentro(mouseX, mouseY, px + pw - 22, py + 4, 18, 18)
+        f.drawStringWithShadow(
+            "X", (px + pw - 17).toFloat(), (py + 10).toFloat(),
+            if (hoverX) Cores.branco else Cores.cinza
+        )
+        Gui.drawRect(px + 1, py + headerH, px + pw - 1, py + headerH + 1, Cores.borda)
+
+        // barra lateral
+        Gui.drawRect(px + sideW, py + headerH + 1, px + sideW + 1, py + ph - 1, Cores.borda)
+        abas.forEachIndexed { i, nome ->
+            val ty = py + headerH + 10 + i * 26
+            if (i == aba) caixa(px + 8, ty, sideW - 12, 22, Cores.destaque)
+            f.drawStringWithShadow(
+                nome, (px + 16).toFloat(), (ty + 7).toFloat(),
+                if (i == aba) Cores.branco else Cores.cinza
+            )
+        }
+        coroa(px + 10, py + ph - 26)
+        f.drawStringWithShadow("GG CLIENT", (px + 32).toFloat(), (py + ph - 27).toFloat(), Cores.branco)
+        f.drawString("v1.0", px + 32, py + ph - 17, Cores.cinza)
+
+        // título da aba
+        GlStateManager.pushMatrix()
+        GlStateManager.translate(listX.toFloat(), (py + headerH + 9).toFloat(), 0f)
+        GlStateManager.scale(1.2f, 1.2f, 1f)
+        f.drawStringWithShadow(abas[aba], 0f, 0f, Cores.branco)
+        GlStateManager.popMatrix()
+
+        when (aba) {
+            0 -> desenharModulos()
+            1 -> {
+                f.drawSplitString("Abrir ou fechar o menu: Right Shift", listX, listY + 2, listW, Cores.branco)
+                f.drawSplitString(
+                    "Suas configurações são salvas sozinhas em config/ggclient-mods.properties",
+                    listX, listY + 26, listW, Cores.cinza
+                )
+                f.drawSplitString(
+                    "Use o botão Cfg ao lado de cada módulo para ajustar tecla, posição e tamanho.",
+                    listX, listY + 62, listW, Cores.cinza
+                )
+            }
+            else -> {
+                f.drawSplitString("Jogador: " + mc.session.username, listX, listY + 2, listW, Cores.branco)
+                f.drawSplitString("GG CLIENT v1.0", listX, listY + 18, listW, Cores.cinza)
             }
         }
     }
 
-    override fun actionPerformed(button: GuiButton) {
-        if (button.id >= 100) {
-            mc.displayGuiScreen(TelaConfig(Mods.lista[button.id - 100], this))
+    private fun desenharModulos() {
+        val f = fontRendererObj
+        val s = ScaledResolution(mc).scaleFactor
+
+        GL11.glEnable(GL11.GL_SCISSOR_TEST)
+        GL11.glScissor(listX * s, mc.displayHeight - (listY + listH) * s, listW * s, listH * s)
+
+        Mods.lista.forEachIndexed { i, mod ->
+            val ry = listY + i * (rowH + gap) - scroll.toInt()
+            if (ry + rowH >= listY && ry <= listY + listH) {
+                painelCaixa(listX, ry, listW, rowH, Cores.linhaBorda, Cores.linha)
+
+                // ícone (por enquanto a inicial do módulo)
+                caixa(listX + 4, ry + 3, 17, 17, Cores.icone)
+                val letra = mod.nome.first().toString()
+                f.drawStringWithShadow(
+                    letra,
+                    (listX + 4 + (17 - f.getStringWidth(letra)) / 2).toFloat(),
+                    (ry + 7).toFloat(), Cores.destaque
+                )
+
+                f.drawStringWithShadow(mod.nome, (listX + 28).toFloat(), (ry + 3).toFloat(), Cores.branco)
+                GlStateManager.pushMatrix()
+                GlStateManager.translate((listX + 28).toFloat(), (ry + 13).toFloat(), 0f)
+                GlStateManager.scale(0.75f, 0.75f, 1f)
+                f.drawString(descricoes[mod.nome] ?: "", 0, 0, Cores.cinza)
+                GlStateManager.popMatrix()
+
+                // botão Cfg
+                if (mod.configuravel) {
+                    val cx = listX + listW - 64
+                    painelCaixa(cx, ry + 5, 26, 13, Cores.borda, Cores.icone)
+                    f.drawString("Cfg", cx + (26 - f.getStringWidth("Cfg")) / 2, ry + 8, Cores.cinza)
+                }
+
+                // switch
+                val tx = listX + listW - 34
+                val ty = ry + (rowH - 12) / 2
+                caixa(tx, ty, 26, 12, if (mod.ativo) Cores.destaque else Cores.trilhoOff)
+                val bx = if (mod.ativo) tx + 26 - 10 else tx + 2
+                caixa(bx, ty + 2, 8, 8, if (mod.ativo) Cores.branco else Cores.bolinhaOff)
+            }
+        }
+
+        GL11.glDisable(GL11.GL_SCISSOR_TEST)
+    }
+
+    private fun clicar(mx: Int, my: Int) {
+        calcular()
+        if (dentro(mx, my, px + pw - 22, py + 4, 18, 18)) {
+            mc.displayGuiScreen(null)
             return
         }
-        val mod = Mods.lista[button.id]
-        mod.ativo = !mod.ativo
-        button.displayString = texto(mod)
+        for (i in abas.indices) {
+            if (dentro(mx, my, px + 8, py + headerH + 10 + i * 26, sideW - 12, 22)) {
+                aba = i
+                scroll = 0f
+                return
+            }
+        }
+        if (aba != 0) return
+        if (!dentro(mx, my, listX, listY, listW, listH)) return
+
+        Mods.lista.forEachIndexed { i, mod ->
+            val ry = listY + i * (rowH + gap) - scroll.toInt()
+            if (dentro(mx, my, listX, ry, listW, rowH)) {
+                if (mod.configuravel && dentro(mx, my, listX + listW - 66, ry, 30, rowH)) {
+                    mc.displayGuiScreen(TelaConfig(mod, this))
+                } else {
+                    mod.ativo = !mod.ativo
+                }
+            }
+        }
+    }
+
+    override fun mouseClicked(mouseX: Int, mouseY: Int, mouseButton: Int) {
+        if (mouseButton == 0) {
+            pressed = true
+            dragged = false
+            pressY = mouseY
+            lastY = mouseY
+        }
+    }
+
+    override fun mouseClickMove(mouseX: Int, mouseY: Int, clickedMouseButton: Int, timeSinceLastClick: Long) {
+        if (!pressed) return
+        if (!dragged && Math.abs(mouseY - pressY) > 4) dragged = true
+        if (dragged && aba == 0) {
+            scroll -= (mouseY - lastY).toFloat()
+            ajustaScroll()
+        }
+        lastY = mouseY
+    }
+
+    override fun mouseReleased(mouseX: Int, mouseY: Int, state: Int) {
+        if (pressed && !dragged) clicar(mouseX, mouseY)
+        pressed = false
+        dragged = false
+    }
+
+    override fun handleMouseInput() {
+        super.handleMouseInput()
+        val d = Mouse.getEventDWheel()
+        if (d != 0 && aba == 0) {
+            calcular()
+            scroll += if (d > 0) -20f else 20f
+            ajustaScroll()
+        }
     }
 
     override fun keyTyped(typedChar: Char, keyCode: Int) {
@@ -83,17 +332,12 @@ class TelaMenu : GuiScreen() {
         }
     }
 
-    override fun drawScreen(mouseX: Int, mouseY: Int, partialTicks: Float) {
-        drawDefaultBackground()
-        drawCenteredString(fontRendererObj, "GGClient - Mods", width / 2, 20, 0xFFFFFF)
-        super.drawScreen(mouseX, mouseY, partialTicks)
-    }
     override fun onGuiClosed() {
         Salvar.salvar()
     }
+
     override fun doesGuiPauseGame(): Boolean = false
 }
-
 class TelaConfig(private val mod: Modulo, private val pai: GuiScreen) : GuiScreen() {
 
     private var esperandoTecla = false
