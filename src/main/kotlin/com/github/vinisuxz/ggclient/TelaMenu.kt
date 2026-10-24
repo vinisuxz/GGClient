@@ -53,7 +53,7 @@ class TelaMenu : GuiScreen() {
 
     private fun layout() {
         esc = ScaledResolution(mc).scaleFactor
-        u = minOf(mc.displayWidth * 0.92f / painelW, mc.displayHeight * 0.92f / painelH, 3f)
+        u = minOf(340f * esc / painelW, mc.displayWidth * 0.92f / painelW, mc.displayHeight * 0.92f / painelH)
         px = (mc.displayWidth - painelW * u) / 2f
         py = (mc.displayHeight - painelH * u) / 2f
     }
