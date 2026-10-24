@@ -1,4 +1,4 @@
-package SEU.PACKAGE
+package com.github.vinisuxz.ggclient
 
 import net.minecraft.client.Minecraft
 import net.minecraft.client.settings.KeyBinding
