@@ -14,7 +14,8 @@ class Modulo(val nome: String, var ativo: Boolean = false)
 object Mods {
     val fps = Modulo("FPS", true)
     val toggleSprint = Modulo("ToggleSprint")
-    val lista = listOf(fps, toggleSprint)
+    val fullbright = Modulo("Fullbright")
+    val lista = listOf(fps, toggleSprint, fullbright)
 }
 
 class TelaMenu : GuiScreen() {
@@ -58,6 +59,7 @@ class Eventos {
     private var sprintLigado = false
     private var ctrlAnterior = false
     private var rshiftAnterior = false
+    private var gammaOriginal = -1f
 
     @SubscribeEvent
     fun aoTick(e: TickEvent.ClientTickEvent) {
@@ -65,7 +67,14 @@ class Eventos {
 
         val semTela = mc.currentScreen == null
         val codigoSprint = mc.gameSettings.keyBindSprint.keyCode
-
+        // Fullbright
+        if (Mods.fullbright.ativo) {
+            if (gammaOriginal < 0f) gammaOriginal = mc.gameSettings.gammaSetting
+            mc.gameSettings.gammaSetting = 100f
+        } else if (gammaOriginal >= 0f) {
+            mc.gameSettings.gammaSetting = gammaOriginal
+            gammaOriginal = -1f
+        }
         // Right Shift abre o menu
         val rshift = Keyboard.isKeyDown(Keyboard.KEY_RSHIFT)
         if (rshift && !rshiftAnterior && semTela) {
