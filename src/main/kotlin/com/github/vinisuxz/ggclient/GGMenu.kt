@@ -12,8 +12,9 @@ import org.lwjgl.input.Keyboard
 class Modulo(val nome: String, var ativo: Boolean = false)
 
 object Mods {
+    val fps = Modulo("FPS", true)
     val toggleSprint = Modulo("ToggleSprint")
-    val lista = listOf(toggleSprint)
+    val lista = listOf(fps, toggleSprint)
 }
 
 class TelaMenu : GuiScreen() {
