@@ -21,21 +21,28 @@ import org.lwjgl.input.Keyboard
 class Modulo(
     val nome: String,
     var ativo: Boolean = false,
-    val configuravel: Boolean = false
+    val layout: Boolean = false,
+    val temEscala: Boolean = false,
+    val temTecla: Boolean = false
 ) {
+    val configuravel: Boolean
+        get() = layout || temEscala || temTecla
+
     var fundo = true
     var offX = 0
     var offY = 0
+    var escalaPct = 100
+    var tecla = Keyboard.KEY_H
 }
 
 object Mods {
     val fps = Modulo("FPS", true)
     val toggleSprint = Modulo("ToggleSprint")
     val fullbright = Modulo("Fullbright")
-    val perspective = Modulo("Perspective")
+    val perspective = Modulo("Perspective", false, temTecla = true)
     val noParticles = Modulo("NoParticles")
-    val scoreboard = Modulo("Scoreboard", false, true)
-    val chat = Modulo("Chat", false, true)
+    val scoreboard = Modulo("Scoreboard", false, layout = true, temEscala = true)
+    val chat = Modulo("Chat", false, layout = true)
 
     val lista = listOf(fps, toggleSprint, fullbright, perspective, noParticles, scoreboard, chat)
 }
@@ -87,18 +94,53 @@ class TelaMenu : GuiScreen() {
 
 class TelaConfig(private val mod: Modulo, private val pai: GuiScreen) : GuiScreen() {
 
+    private var esperandoTecla = false
+    private var botaoTecla: GuiButton? = null
+    private var botaoEscala: GuiButton? = null
+
     private fun textoFundo(): String = "Fundo: " + (if (mod.fundo) "ON" else "OFF")
+
+    private fun textoTecla(): String =
+        if (esperandoTecla) "> Aperte uma tecla <"
+        else "Tecla: " + Keyboard.getKeyName(mod.tecla)
+
+    private fun textoEscala(): String = "Tamanho: " + mod.escalaPct + "%"
 
     override fun initGui() {
         buttonList.clear()
         val cx = width / 2
-        buttonList.add(GuiButton(0, cx - 75, 50, 150, 20, textoFundo()))
-        buttonList.add(GuiButton(1, cx - 75, 80, 70, 20, "Esquerda"))
-        buttonList.add(GuiButton(2, cx + 5, 80, 70, 20, "Direita"))
-        buttonList.add(GuiButton(3, cx - 75, 104, 70, 20, "Cima"))
-        buttonList.add(GuiButton(4, cx + 5, 104, 70, 20, "Baixo"))
-        buttonList.add(GuiButton(5, cx - 75, 134, 150, 20, "Resetar posicao"))
-        buttonList.add(GuiButton(6, cx - 75, 164, 150, 20, "Voltar"))
+        var y = 50
+
+        if (mod.temTecla) {
+            val b = GuiButton(10, cx - 75, y, 150, 20, textoTecla())
+            botaoTecla = b
+            buttonList.add(b)
+            y += 30
+        }
+
+        if (mod.temEscala) {
+            buttonList.add(GuiButton(7, cx - 75, y, 30, 20, "-"))
+            val b = GuiButton(9, cx - 43, y, 86, 20, textoEscala())
+            botaoEscala = b
+            buttonList.add(b)
+            buttonList.add(GuiButton(8, cx + 45, y, 30, 20, "+"))
+            y += 30
+        }
+
+        if (mod.layout) {
+            buttonList.add(GuiButton(0, cx - 75, y, 150, 20, textoFundo()))
+            y += 30
+            buttonList.add(GuiButton(1, cx - 75, y, 70, 20, "Esquerda"))
+            buttonList.add(GuiButton(2, cx + 5, y, 70, 20, "Direita"))
+            y += 24
+            buttonList.add(GuiButton(3, cx - 75, y, 70, 20, "Cima"))
+            buttonList.add(GuiButton(4, cx + 5, y, 70, 20, "Baixo"))
+            y += 30
+            buttonList.add(GuiButton(5, cx - 75, y, 150, 20, "Resetar posicao"))
+            y += 30
+        }
+
+        buttonList.add(GuiButton(6, cx - 75, y, 150, 20, "Voltar"))
     }
 
     override fun actionPerformed(button: GuiButton) {
@@ -117,10 +159,30 @@ class TelaConfig(private val mod: Modulo, private val pai: GuiScreen) : GuiScree
                 mod.offY = 0
             }
             6 -> mc.displayGuiScreen(pai)
+            7 -> {
+                mod.escalaPct = (mod.escalaPct - 10).coerceIn(50, 200)
+                botaoEscala?.displayString = textoEscala()
+            }
+            8 -> {
+                mod.escalaPct = (mod.escalaPct + 10).coerceIn(50, 200)
+                botaoEscala?.displayString = textoEscala()
+            }
+            10 -> {
+                esperandoTecla = true
+                button.displayString = textoTecla()
+            }
         }
     }
 
     override fun keyTyped(typedChar: Char, keyCode: Int) {
+        if (esperandoTecla) {
+            if (keyCode != Keyboard.KEY_ESCAPE) {
+                mod.tecla = keyCode
+            }
+            esperandoTecla = false
+            botaoTecla?.displayString = textoTecla()
+            return
+        }
         if (keyCode == Keyboard.KEY_ESCAPE || keyCode == Keyboard.KEY_RSHIFT) {
             mc.displayGuiScreen(pai)
         } else {
@@ -200,8 +262,8 @@ class Eventos {
             mc.effectRenderer.clearEffects(mc.theWorld)
         }
 
-        // Perspective (ativo só enquanto segura a tecla H)
-        val teclaPersp = Keyboard.isKeyDown(Keyboard.KEY_H) && Mods.perspective.ativo
+        // Perspective (ativo só enquanto segura a tecla configurada)
+        val teclaPersp = Keyboard.isKeyDown(Mods.perspective.tecla) && Mods.perspective.ativo
         if (teclaPersp && !perspAtiva && semTela) {
             ligarPerspective()
         } else if (!teclaPersp && perspAtiva) {
@@ -335,10 +397,22 @@ class Eventos {
         }
 
         val altura = scores.size * alturaLinha
-        val baseY = res.scaledHeight / 2 + altura / 3 + m.offY
+        val baseY = res.scaledHeight / 2 + altura / 3
         val margem = 3
-        val esq = res.scaledWidth - largura - margem + m.offX
-        val dir = res.scaledWidth - margem + 2 + m.offX
+        val esq = res.scaledWidth - largura - margem
+        val dir = res.scaledWidth - margem + 2
+
+        val escala = m.escalaPct / 100f
+        val ancoraX = res.scaledWidth.toFloat()
+        val ancoraY = res.scaledHeight / 2f
+
+        GlStateManager.pushMatrix()
+        // posição escolhida no Cfg
+        GlStateManager.translate(m.offX.toFloat(), m.offY.toFloat(), 0f)
+        // tamanho: cresce/encolhe a partir do lado direito da tela
+        GlStateManager.translate(ancoraX, ancoraY, 0f)
+        GlStateManager.scale(escala, escala, 1f)
+        GlStateManager.translate(-ancoraX, -ancoraY, 0f)
 
         var j = 0
         for (s in scores) {
@@ -361,6 +435,8 @@ class Eventos {
                 fonte.drawString(titulo, esq + largura / 2 - fonte.getStringWidth(titulo) / 2, y - alturaLinha, 0xFFFFFF)
             }
         }
+
+        GlStateManager.popMatrix()
     }
 
     // ---------- CHAT ----------
