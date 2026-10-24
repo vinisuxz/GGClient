@@ -47,6 +47,7 @@ class GGClient {
             configKeyBind,
             Eventos()
         )
+        TelaInicialHook.register()
     }
 
     companion object {
